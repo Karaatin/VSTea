@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VSTea Plugin Inventory</title>
+    <style>
+        :root {
+            --bg-app: {{ colors.BG_APP | default('#09090b') }};
+            --bg-card: {{ colors.BG_CARD | default('#18181b') }};
+            --bg-hover: {{ colors.BG_HOVER | default('#27272a') }};
+            --accent: {{ colors.ACCENT | default('#10b981') }};
+            --text-main: {{ colors.TEXT_MAIN | default('#f4f4f5') }};
+            --text-muted: {{ colors.TEXT_MUTED | default('#a1a1aa') }};
+            --border: {{ colors.BORDER | default('#27272a') }};
+            --border-dim: {{ colors.BORDER_DIM | default('#3f3f46') }};
+            --success: {{ colors.SUCCESS | default('#10b981') }};
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background-color: var(--bg-app);
+            color: var(--text-main);
+            margin: 0; padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        /* HEADER */
+        header {
+            display: flex; justify-content: space-between; align-items: flex-end;
+            margin-bottom: 30px; border-bottom: 2px solid var(--border); padding-bottom: 25px;
+        }
+        .header-title { margin: 0 0 8px 0; font-size: 2.5rem; font-weight: 800; letter-spacing: -1px; }
+        .subtitle { color: var(--text-muted); font-size: 1rem; }
+        .version-badge {
+            background: var(--bg-hover); color: var(--accent);
+            padding: 3px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 800; margin-left: 10px;
+        }
+
+        .stats { display: flex; gap: 20px; }
+        .stat-box {
+            background: var(--bg-card); padding: 15px 25px;
+            border-radius: 12px; border: 1px solid var(--border);
+            text-align: center; min-width: 120px;
+        }
+        .stat-num { font-size: 2rem; font-weight: 800; color: var(--success); display: block; line-height: 1; margin-bottom: 8px;}
+        .stat-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 700;}
+
+        /* PROGRESS BAR (Neutral benannt) */
+        .progress-container { margin-bottom: 30px; background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
+        .progress-header { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 0.95rem; font-weight: 600; }
+        .progress-track { width: 100%; height: 8px; background: var(--bg-app); border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--success); width: 0%; transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        /* SEARCH */
+        .search-container { margin-bottom: 20px; position: relative; }
+        input#search {
+            width: 100%; padding: 18px 20px 18px 45px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 12px; color: var(--text-main); font-size: 1.05rem;
+            transition: all 0.2s; box-sizing: border-box;
+        }
+        input#search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1); }
+        .search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 1.2rem;}
+
+        /* TABLE CONTAINER & THEMED SCROLLBAR */
+        .table-container {
+            background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border);
+            overflow: auto; max-height: 65vh;
+            /* Firefox Scrollbar */
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) var(--bg-card);
+        }
+
+        .table-container::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+        .table-container::-webkit-scrollbar-track {
+            background: transparent; /* Verhindert das Übermalen der runden Tabellen-Ecken */
+            margin: 8px 0; /* Lässt den Griff nicht bis in die abgerundeten Ecken rutschen */
+        }
+        .table-container::-webkit-scrollbar-thumb {
+            background-color: var(--border);
+            border-radius: 10px;
+            border: 3px solid var(--bg-card); /* Fake-Padding für den "schwebenden" Look */
+        }
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background-color: var(--border-dim);
+        }
+        .table-container::-webkit-scrollbar-corner {
+            background: transparent; /* Falls man mal horizontal UND vertikal scrollen muss */
+        }
+
+
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th {
+            background-color: var(--bg-app); color: var(--text-muted);
+            text-transform: uppercase; font-size: 0.8rem; font-weight: 700; letter-spacing: 1px;
+            padding: 16px 20px; border-bottom: 2px solid var(--border);
+            position: sticky; top: 0; z-index: 10;
+        }
+        td { padding: 16px 20px; border-bottom: 1px solid var(--border); vertical-align: middle; transition: opacity 0.2s; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background-color: var(--bg-hover); }
+
+        /* Zeile ausgrauen, wenn gecheckt (Neutraler Name) */
+        tr.checked-row td:not(:first-child) { opacity: 0.3; }
+        tr.checked-row:hover td:not(:first-child) { opacity: 0.8; }
+
+        .plugin-name { font-weight: 700; font-size: 1.1rem; color: var(--text-main); margin-bottom: 4px; }
+        .plugin-vendor { font-size: 0.85rem; color: var(--text-muted); }
+
+        /* CHECKBOXES */
+        .chk-wrapper { text-align: center; width: 40px; }
+        .custom-chk {
+            appearance: none; width: 24px; height: 24px;
+            border: 2px solid var(--border-dim); border-radius: 6px;
+            background: var(--bg-app); cursor: pointer; transition: all 0.2s; position: relative;
+            margin: 0; display: inline-block; vertical-align: middle;
+        }
+        .custom-chk:checked { background: var(--success); border-color: var(--success); }
+        .custom-chk:checked::after { content: '✓'; position: absolute; color: var(--bg-app); font-size: 16px; font-weight: 900; left: 4px; top: 0px; }
+        .custom-chk:hover { border-color: var(--accent); }
+
+        /* BADGES & TAGS */
+        .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; display: inline-block; margin-right: 6px; text-transform: uppercase; border: 1px solid var(--success); color: var(--success); }
+        .daw-tag { color: var(--text-muted); font-size: 0.85rem; background: var(--bg-app); padding: 4px 10px; border-radius: 12px; border: 1px solid var(--border); }
+        .info-btn { background: transparent; border: 1px solid var(--border-dim); color: var(--text-muted); border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.2s; white-space: nowrap; }
+        .info-btn:hover { background: var(--accent); color: var(--bg-app); border-color: var(--accent); }
+
+        /* MODAL */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); display: none; justify-content: center; align-items: center; z-index: 1000; opacity: 0; transition: opacity 0.3s ease; }
+        .modal-overlay.active { opacity: 1; display: flex; }
+        .modal { background: var(--bg-card); border-radius: 16px; width: 650px; max-width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; max-height: 85vh; transform: translateY(20px); transition: transform 0.3s; }
+        .modal-overlay.active .modal { transform: translateY(0); }
+        .modal-header { padding: 25px 30px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; background: var(--bg-app);}
+        .modal-title { margin: 0 0 5px 0; font-size: 1.6rem; color: var(--text-main); font-weight: 800;}
+        .close-btn { background: transparent; border: none; color: var(--text-muted); font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1; }
+        .close-btn:hover { color: var(--text-main); }
+        .modal-body { padding: 30px; overflow-y: auto; }
+        .path-item { background: var(--bg-app); padding: 12px 16px; margin-bottom: 8px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 15px; }
+        .path-text { color: var(--text-main); font-family: monospace; font-size: 0.85rem; word-break: break-all; opacity: 0.9; }
+        .path-format { color: var(--accent); font-size: 0.7rem; font-weight: 800; padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border-dim); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div>
+            <h1 class="header-title">VSTea Inventory</h1>
+            <div class="subtitle">Generated on {{ stats.date }} <span class="version-badge">v{{ stats.version }}</span></div>
+        </div>
+        <div class="stats">
+            <div class="stat-box">
+                <span class="stat-num">{{ stats.total }}</span>
+                <span class="stat-label">Unique Plugins</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-num">{{ stats.instances }}</span>
+                <span class="stat-label">Total Files</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="progress-container">
+        <div class="progress-header">
+            <span style="color: var(--text-muted);">Progress</span>
+            <span id="progress-text" style="color: var(--accent);">0 / {{ stats.total }} (0%)</span>
+        </div>
+        <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+    </div>
+
+    <div class="search-container">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search" placeholder="Search plugins by name, vendor or format...">
+    </div>
+
+    <div class="table-container">
+        <table id="pluginTable">
+            <thead>
+                <tr>
+                    <th class="chk-wrapper">
+                        <input type="checkbox" id="selectAll" class="custom-chk" title="Select/Deselect all visible plugins">
+                    </th>
+                    <th>Plugin</th>
+                    <th>Formats</th>
+                    <th>Detected By</th>
+                    <th style="text-align: right;">Paths</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in plugins %}
+                {% set uid = "chk_" + p.vendor|lower|replace(' ', '_') + "_" + p.name|lower|replace(' ', '_') %}
+                <tr id="row_{{ uid }}">
+                    <td class="chk-wrapper">
+                        <input type="checkbox" class="custom-chk plugin-checkbox" id="{{ uid }}" onchange="togglePlugin('{{ uid }}')">
+                    </td>
+                    <td>
+                        <div class="plugin-name">{{ p.name }}</div>
+                        <div class="plugin-vendor">{{ p.vendor if p.vendor != 'Unknown' else 'Unknown Vendor' }}</div>
+                    </td>
+                    <td>
+                        {% for fmt in p.formats|sort %}
+                            {% if fmt != "FL_NATIVE" %} <span class="badge">{{ fmt }}</span> {% endif %}
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% for daw in p.detected_by|sort %}
+                            <span class="daw-tag">{{ daw }}</span>
+                        {% endfor %}
+                    </td>
+                    <td style="text-align: right;">
+                        <button class="info-btn" onclick='openModal(this)' data-plugin='{{ p.to_dict() | tojson | forceescape }}'>Details</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div>
+                <h2 class="modal-title" id="modalTitle">Plugin Name</h2>
+                <div style="color: var(--text-muted); font-size: 0.95rem;" id="modalVendor">Vendor Name</div>
+            </div>
+            <button class="close-btn" onclick="closeModal()">×</button>
+        </div>
+        <div class="modal-body" id="modalContent"></div>
+    </div>
+</div>
+
+<script>
+    const totalPlugins = {{ stats.total }};
+
+    window.onload = function() {
+        const checkboxes = document.querySelectorAll('.plugin-checkbox');
+        checkboxes.forEach(chk => {
+            const isChecked = localStorage.getItem(chk.id) === 'true';
+            chk.checked = isChecked;
+            updateRowStyle(chk.id, isChecked);
+        });
+        updateProgress();
+    };
+
+    function togglePlugin(id) {
+        const chk = document.getElementById(id);
+        localStorage.setItem(id, chk.checked);
+        updateRowStyle(id, chk.checked);
+        updateProgress();
+        updateMasterCheckboxState();
+    }
+
+    // Update: Nutzt jetzt den neutralen Klassennamen 'checked-row'
+    function updateRowStyle(id, isChecked) {
+        const row = document.getElementById('row_' + id);
+        if (isChecked) row.classList.add('checked-row');
+        else row.classList.remove('checked-row');
+    }
+
+    function updateProgress() {
+        const checkboxes = document.querySelectorAll('.plugin-checkbox');
+        let checkedCount = Array.from(checkboxes).filter(chk => chk.checked).length;
+        const percent = totalPlugins === 0 ? 0 : Math.round((checkedCount / totalPlugins) * 100);
+
+        document.getElementById('progress-text').innerText = `${checkedCount} / ${totalPlugins} (${percent}%)`;
+        document.getElementById('progress-fill').style.width = `${percent}%`;
+    }
+
+    document.getElementById('selectAll').addEventListener('change', function(e) {
+        const isChecked = e.target.checked;
+        const visibleRows = document.querySelectorAll('#pluginTable tbody tr:not([style*="display: none"])');
+        visibleRows.forEach(row => {
+            const chk = row.querySelector('.plugin-checkbox');
+            if (chk && chk.checked !== isChecked) {
+                chk.checked = isChecked;
+                localStorage.setItem(chk.id, isChecked);
+                updateRowStyle(chk.id, isChecked);
+            }
+        });
+        updateProgress();
+    });
+
+    document.getElementById('search').addEventListener('input', function() {
+        let filter = this.value.toLowerCase();
+        let rows = document.querySelectorAll('#pluginTable tbody tr');
+        rows.forEach(row => {
+            let text = row.innerText.toLowerCase();
+            row.style.display = text.includes(filter) ? '' : 'none';
+        });
+        document.getElementById('selectAll').checked = false;
+        updateMasterCheckboxState();
+    });
+
+    function updateMasterCheckboxState() {
+        const visibleRows = document.querySelectorAll('#pluginTable tbody tr:not([style*="display: none"])');
+        if (visibleRows.length === 0) return;
+        const allVisibleChecked = Array.from(visibleRows).every(row => {
+            return row.querySelector('.plugin-checkbox').checked;
+        });
+        document.getElementById('selectAll').checked = allVisibleChecked;
+    }
+
+    // Modal Logic (unverändert)
+    const overlay = document.getElementById('modalOverlay');
+    const content = document.getElementById('modalContent');
+    function openModal(btn) {
+        const data = JSON.parse(btn.getAttribute('data-plugin'));
+        document.getElementById('modalTitle').innerText = data.name;
+        document.getElementById('modalVendor').innerText = data.vendor !== "Unknown" ? data.vendor : "Unknown Vendor";
+
+        let html = '';
+        const groups = {};
+        data.instances.forEach(item => {
+            const d = item.daw || "Unknown Source";
+            if(!groups[d]) groups[d] = [];
+            groups[d].push(item);
+        });
+
+        for (const daw of Object.keys(groups).sort()) {
+            html += `<div style="margin-bottom: 25px;"><div style="font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; font-weight: 800;">Detected in ${daw}</div>`;
+            groups[daw].forEach(entry => {
+                let f = entry.format || "Unknown";
+                if(f==="FL_NATIVE") f="Internal";
+                html += `<div class="path-item"><span class="path-text">${entry.path}</span><span class="path-format">${f}</span></div>`;
+            });
+            html += `</div>`;
+        }
+        content.innerHTML = html;
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeModal(e) {
+        if (!e || e.target === overlay || e.target.classList.contains('close-btn')) {
+            overlay.classList.remove('active');
+            setTimeout(() => document.body.style.overflow = '', 300);
+        }
+    }
+    document.addEventListener('keydown', e => { if (e.key === "Escape") closeModal(); });
+</script>
+</body>
+</html>
